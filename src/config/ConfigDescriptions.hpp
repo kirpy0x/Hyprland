@@ -3,6 +3,12 @@
 #include "ConfigManager.hpp"
 
 inline static const std::vector<SConfigOptionDescription> CONFIG_OPTIONS = {
+    SConfigOptionDescription{
+        .value       = "misc:enable_anr_notification",
+        .description = "whether to enable ANR (app not responding) notification when an app hangs",
+        .type        = CONFIG_OPTION_BOOL,
+        .data        = SConfigOptionDescription::SBoolData{false},
+    },
 
     /*
      * general:

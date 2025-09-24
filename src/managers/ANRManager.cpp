@@ -36,12 +36,29 @@ CANRManager::CANRManager() {
         m_data.emplace_back(makeShared<SANRData>(window));
     });
 
+    static auto P1 = g_pHookSystem->hookDynamic("closeWindow", [this](void* self, SCallbackInfo& info, std::any data) {
+        auto window = std::any_cast<PHLWINDOW>(data);
+
+        for (const auto& d : m_data) {
+            if (!d->fitsWindow(window))
+                continue;
+
+            // kill the dialog, act as if we got a "ping" in case there's more than one
+            // window from this client, in which case the dialog will re-appear.
+            d->killDialog();
+            d->missedResponses = 0;
+            d->dialogSaidWait  = false;
+            return;
+        }
+    });
+
     m_timer->updateTimeout(TIMER_TIMEOUT);
 }
 
 void CANRManager::onTick() {
-    static auto PENABLEANR    = CConfigValue<Hyprlang::INT>("misc:enable_anr_dialog");
-    static auto PANRTHRESHOLD = CConfigValue<Hyprlang::INT>("misc:anr_missed_pings");
+    static auto PENABLEANR            = CConfigValue<Hyprlang::INT>("misc:enable_anr_dialog");
+    static auto PENABLEARNOTIFICATION = CConfigValue<Hyprlang::INT>("misc:enable_anr_notification");
+    static auto PANRTHRESHOLD         = CConfigValue<Hyprlang::INT>("misc:anr_missed_pings");
 
     if (!*PENABLEANR) {
         m_timer->updateTimeout(TIMER_TIMEOUT * 10);
@@ -68,6 +85,22 @@ void CANRManager::onTick() {
 
         if (data->missedResponses >= *PANRTHRESHOLD) {
             if (!data->isRunning() && !data->dialogSaidWait) {
+                const auto FORMATTED_APP_NAME = firstWindow->m_title.empty() ? "unknown" : firstWindow->m_title;
+                const auto FORMATTED_APP_CLASS = firstWindow->m_class.empty() ? "unknown" : firstWindow->m_class;
+
+                // Notification
+                if (*PENABLEARNOTIFICATION && g_pHyprNotificationOverlay) {
+                    g_pHyprNotificationOverlay->addNotification(
+                        std::format("Application <b>{}</b> with class of <b>{}</b> is not responding.",
+                                    FORMATTED_APP_NAME,
+                                    FORMATTED_APP_CLASS),
+                        CHyprColor{1.0, 0.1, 0.1, 1.0}, // Red color for ANR
+                        5000, // 5 seconds display
+                        ICON_WARNING
+                    );
+                }
+
+                // Dialog
                 data->runDialog("Application Not Responding", firstWindow->m_title, firstWindow->m_class, data->getPid());
 
                 for (const auto& w : g_pCompositor->m_windows) {
@@ -167,18 +200,6 @@ void CANRManager::SANRData::runDialog(const std::string& title, const std::strin
 
     const auto FORMATTED_APP_NAME = appName.empty() ? "unknown" : appName;
     const auto FORMATTED_APP_CLASS = appClass.empty() ? "unknown" : appClass;
-
-    // Add notification
-    if (g_pHyprNotificationOverlay) {
-        g_pHyprNotificationOverlay->addNotification(
-            std::format("Application <b>{}</b> with class of <b>{}</b> is not responding.",
-                        FORMATTED_APP_NAME,
-                        FORMATTED_APP_CLASS),
-            CHyprColor{1.0, 0.1, 0.1, 1.0}, // Red color for ANR
-            5000, // 5 seconds display
-            ICON_WARNING
-        );
-    }
 
     dialogBox = CAsyncDialogBox::create(title,
                                         std::format("Application {} with class of {} is not responding.\nWhat do you want to do with it?", appName.empty() ? "unknown" : appName,
