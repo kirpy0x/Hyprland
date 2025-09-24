@@ -8,6 +8,7 @@
 #include "./eventLoop/EventLoopManager.hpp"
 #include "../config/ConfigValue.hpp"
 #include "../xwayland/XSurface.hpp"
+#include "../debug/HyprNotificationOverlay.hpp"
 
 using namespace Hyprutils::OS;
 
@@ -163,6 +164,21 @@ CANRManager::SANRData::~SANRData() {
 void CANRManager::SANRData::runDialog(const std::string& title, const std::string& appName, const std::string appClass, pid_t dialogWmPID) {
     if (dialogBox && dialogBox->isRunning())
         killDialog();
+
+    const auto FORMATTED_APP_NAME = appName.empty() ? "unknown" : appName;
+    const auto FORMATTED_APP_CLASS = appClass.empty() ? "unknown" : appClass;
+
+    // Add notification
+    if (g_pHyprNotificationOverlay) {
+        g_pHyprNotificationOverlay->addNotification(
+            std::format("Application <b>{}</b> with class of <b>{}</b> is not responding.",
+                        FORMATTED_APP_NAME,
+                        FORMATTED_APP_CLASS),
+            CHyprColor{1.0, 0.1, 0.1, 1.0}, // Red color for ANR
+            5000, // 5 seconds display
+            ICON_WARNING
+        );
+    }
 
     dialogBox = CAsyncDialogBox::create(title,
                                         std::format("Application {} with class of {} is not responding.\nWhat do you want to do with it?", appName.empty() ? "unknown" : appName,
