@@ -60,7 +60,7 @@ void CANRManager::onTick() {
     static auto PENABLEARNOTIFICATION = CConfigValue<Hyprlang::INT>("misc:enable_anr_notification");
     static auto PANRTHRESHOLD         = CConfigValue<Hyprlang::INT>("misc:anr_missed_pings");
 
-    if (!*PENABLEANR) {
+    if (!*PENABLEANR || !*PENABLEARNOTIFICATION) {
         m_timer->updateTimeout(TIMER_TIMEOUT * 10);
         return;
     }
@@ -101,7 +101,9 @@ void CANRManager::onTick() {
                 }
 
                 // Dialog
-                data->runDialog("Application Not Responding", firstWindow->m_title, firstWindow->m_class, data->getPid());
+                if (*PENABLEANR) {
+                    data->runDialog("Application Not Responding", firstWindow->m_title, firstWindow->m_class, data->getPid());
+                }
 
                 for (const auto& w : g_pCompositor->m_windows) {
                     if (!w->m_isMapped)
