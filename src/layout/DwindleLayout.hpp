@@ -39,6 +39,7 @@ struct SDwindleNodeData {
     }
 
     void                recalcSizePosRecursive(bool force = false, bool horizontalOverride = false, bool verticalOverride = false);
+    Vector2D            getConstrainedSize();
     CHyprDwindleLayout* layout = nullptr;
 };
 

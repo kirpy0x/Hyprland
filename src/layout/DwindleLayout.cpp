@@ -24,22 +24,90 @@ void SDwindleNodeData::recalcSizePosRecursive(bool force, bool horizontalOverrid
 
         const auto SPLITSIDE = !splitTop;
 
+        auto       constrained0 = children[0]->getConstrainedSize();
+        auto       constrained1 = children[1]->getConstrainedSize();
+
         if (SPLITSIDE) {
-            // split left/right
-            const float FIRSTSIZE = box.w / 2.0 * splitRatio;
-            children[0]->box      = CBox{box.x, box.y, FIRSTSIZE, box.h}.noNegativeSize();
-            children[1]->box      = CBox{box.x + FIRSTSIZE, box.y, box.w - FIRSTSIZE, box.h}.noNegativeSize();
+            // horizontal split
+            float w0, w1;
+            if (constrained0.x > 0 && constrained1.x > 0) {
+                float totalW = constrained0.x + constrained1.x;
+                if (totalW > box.w) {
+                    float scale = box.w / totalW;
+                    w0          = constrained0.x * scale;
+                    w1          = constrained1.x * scale;
+                } else {
+                    w0 = constrained0.x;
+                    w1 = constrained1.x;
+                }
+            } else if (constrained0.x > 0) {
+                w0 = std::min(constrained0.x, box.w);
+                w1 = box.w - w0;
+            } else if (constrained1.x > 0) {
+                w1 = std::min(constrained1.x, box.w);
+                w0 = box.w - w1;
+            } else {
+                w0 = box.w * 0.5f * splitRatio;
+                w1 = box.w - w0;
+            }
+            children[0]->box = CBox{box.x, box.y, w0, box.h}.noNegativeSize();
+            children[1]->box = CBox{box.x + w0, box.y, w1, box.h}.noNegativeSize();
         } else {
-            // split top/bottom
-            const float FIRSTSIZE = box.h / 2.0 * splitRatio;
-            children[0]->box      = CBox{box.x, box.y, box.w, FIRSTSIZE}.noNegativeSize();
-            children[1]->box      = CBox{box.x, box.y + FIRSTSIZE, box.w, box.h - FIRSTSIZE}.noNegativeSize();
+            // vertical split
+            float h0, h1;
+            if (constrained0.y > 0 && constrained1.y > 0) {
+                float totalH = constrained0.y + constrained1.y;
+                if (totalH > box.h) {
+                    float scale = box.h / totalH;
+                    h0          = constrained0.y * scale;
+                    h1          = constrained1.y * scale;
+                } else {
+                    h0 = constrained0.y;
+                    h1 = constrained1.y;
+                }
+            } else if (constrained0.y > 0) {
+                h0 = std::min(constrained0.y, box.h);
+                h1 = box.h - h0;
+            } else if (constrained1.y > 0) {
+                h1 = std::min(constrained1.y, box.h);
+                h0 = box.h - h1;
+            } else {
+                h0 = box.h * 0.5f * splitRatio;
+                h1 = box.h - h0;
+            }
+            children[0]->box = CBox{box.x, box.y, box.w, h0}.noNegativeSize();
+            children[1]->box = CBox{box.x, box.y + h0, box.w, h1}.noNegativeSize();
         }
 
         children[0]->recalcSizePosRecursive(force);
         children[1]->recalcSizePosRecursive(force);
     } else {
         layout->applyNodeDataToWindow(this, force);
+    }
+}
+
+Vector2D SDwindleNodeData::getConstrainedSize() {
+    if (!children[0]) {
+        // leaf
+        auto pWin = pWindow.lock();
+        if (pWin && pWin->m_windowData.maxSize.hasValue()) {
+            return pWin->m_windowData.maxSize.value();
+        }
+        return {0, 0};
+    } else {
+        auto c0 = children[0]->getConstrainedSize();
+        auto c1 = children[1]->getConstrainedSize();
+        if (splitTop) {
+            // vertical split
+            float w = std::max(c0.x, c1.x);
+            float h = c0.y + c1.y;
+            return {w > 0 ? w : 0, h > 0 ? h : 0};
+        } else {
+            // horizontal split
+            float w = c0.x + c1.x;
+            float h = std::max(c0.y, c1.y);
+            return {w > 0 ? w : 0, h > 0 ? h : 0};
+        }
     }
 }
 
@@ -277,6 +345,10 @@ void CHyprDwindleLayout::onWindowCreatedTiling(PHLWINDOW pWindow, eDirection dir
         OPENINGON = getFirstNodeOnWorkspace(pWindow->workspaceID());
 
     Debug::log(LOG, "OPENINGON: {}, Monitor: {}", OPENINGON, PMONITOR->m_id);
+
+    if (OPENINGON && OPENINGON->getConstrainedSize() != Vector2D{0, 0}) {
+        OPENINGON = nullptr;
+    }
 
     if (OPENINGON && OPENINGON->workspaceID != PNODE->workspaceID) {
         // special workspace handling
