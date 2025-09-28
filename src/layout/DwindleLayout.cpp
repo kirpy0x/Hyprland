@@ -24,59 +24,55 @@ void SDwindleNodeData::recalcSizePosRecursive(bool force, bool horizontalOverrid
 
         const auto SPLITSIDE = !splitTop;
 
-        auto       constrained0 = children[0]->getConstrainedSize();
-        auto       constrained1 = children[1]->getConstrainedSize();
+        auto       mins0 = children[0]->getConstrainedSize();
+        auto       mins1 = children[1]->getConstrainedSize();
 
         if (SPLITSIDE) {
             // horizontal split
-            float w0, w1;
-            if (constrained0.x > 0 && constrained1.x > 0) {
-                float totalW = constrained0.x + constrained1.x;
-                if (totalW > box.w) {
-                    float scale = box.w / totalW;
-                    w0          = constrained0.x * scale;
-                    w1          = constrained1.x * scale;
-                } else {
-                    w0 = constrained0.x;
-                    w1 = constrained1.x;
-                }
-            } else if (constrained0.x > 0) {
-                w0 = std::min(constrained0.x, box.w);
-                w1 = box.w - w0;
-            } else if (constrained1.x > 0) {
-                w1 = std::min(constrained1.x, box.w);
-                w0 = box.w - w1;
-            } else {
-                w0 = box.w * 0.5f * splitRatio;
-                w1 = box.w - w0;
+            float w0 = box.w * splitRatio;
+            float w1 = box.w - w0;
+
+            // adjust for mins
+            if (w0 < mins0.x)
+                w0 = mins0.x;
+            if (w1 < mins1.x)
+                w1 = mins1.x;
+
+            // if sum > box.w, scale down
+            if (w0 + w1 > box.w) {
+                float scale = box.w / (w0 + w1);
+                w0 *= scale;
+                w1 *= scale;
             }
+
             children[0]->box = CBox{box.x, box.y, w0, box.h}.noNegativeSize();
             children[1]->box = CBox{box.x + w0, box.y, w1, box.h}.noNegativeSize();
+
+            // update splitRatio
+            splitRatio = w0 / box.w;
         } else {
             // vertical split
-            float h0, h1;
-            if (constrained0.y > 0 && constrained1.y > 0) {
-                float totalH = constrained0.y + constrained1.y;
-                if (totalH > box.h) {
-                    float scale = box.h / totalH;
-                    h0          = constrained0.y * scale;
-                    h1          = constrained1.y * scale;
-                } else {
-                    h0 = constrained0.y;
-                    h1 = constrained1.y;
-                }
-            } else if (constrained0.y > 0) {
-                h0 = std::min(constrained0.y, box.h);
-                h1 = box.h - h0;
-            } else if (constrained1.y > 0) {
-                h1 = std::min(constrained1.y, box.h);
-                h0 = box.h - h1;
-            } else {
-                h0 = box.h * 0.5f * splitRatio;
-                h1 = box.h - h0;
+            float h0 = box.h * splitRatio;
+            float h1 = box.h - h0;
+
+            // adjust for mins
+            if (h0 < mins0.y)
+                h0 = mins0.y;
+            if (h1 < mins1.y)
+                h1 = mins1.y;
+
+            // if sum > box.h, scale down
+            if (h0 + h1 > box.h) {
+                float scale = box.h / (h0 + h1);
+                h0 *= scale;
+                h1 *= scale;
             }
+
             children[0]->box = CBox{box.x, box.y, box.w, h0}.noNegativeSize();
             children[1]->box = CBox{box.x, box.y + h0, box.w, h1}.noNegativeSize();
+
+            // update splitRatio
+            splitRatio = h0 / box.h;
         }
 
         children[0]->recalcSizePosRecursive(force);
@@ -88,7 +84,7 @@ void SDwindleNodeData::recalcSizePosRecursive(bool force, bool horizontalOverrid
 
 Vector2D SDwindleNodeData::getConstrainedSize() {
     if (!children[0]) {
-        // leaf
+        // leaf, return min size (maxSize as min for constrained)
         auto pWin = pWindow.lock();
         if (pWin && pWin->m_windowData.maxSize.hasValue()) {
             return pWin->m_windowData.maxSize.value();
@@ -98,15 +94,15 @@ Vector2D SDwindleNodeData::getConstrainedSize() {
         auto c0 = children[0]->getConstrainedSize();
         auto c1 = children[1]->getConstrainedSize();
         if (splitTop) {
-            // vertical split
+            // vertical split, min w = max of children's min w, min h = sum of children's min h
             float w = std::max(c0.x, c1.x);
             float h = c0.y + c1.y;
-            return {w > 0 ? w : 0, h > 0 ? h : 0};
+            return {w, h};
         } else {
-            // horizontal split
+            // horizontal split, min w = sum of children's min w, min h = max of children's min h
             float w = c0.x + c1.x;
             float h = std::max(c0.y, c1.y);
-            return {w > 0 ? w : 0, h > 0 ? h : 0};
+            return {w, h};
         }
     }
 }
