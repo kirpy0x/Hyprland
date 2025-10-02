@@ -637,7 +637,7 @@ void CHyprDwindleLayout::resizeActiveWindow(const Vector2D& pixResize, eRectCorn
 
             Vector2D minSize    = PWINDOW->m_windowData.minSize.valueOr(Vector2D{30.0, 30.0});
             Vector2D maxSize    = PWINDOW->m_windowData.maxSize.valueOr(Vector2D{INFINITY, INFINITY});
-            Vector2D upperBound = maxSize.min(Vector2D{wbox.w, wbox.h});
+            Vector2D upperBound = Vector2D{std::min(maxSize.x, wbox.w), std::min(maxSize.y, wbox.h)};
 
             PWINDOW->m_pseudoSize = PWINDOW->m_pseudoSize.clamp(minSize, upperBound);
 
