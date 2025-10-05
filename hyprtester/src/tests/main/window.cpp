@@ -247,6 +247,42 @@ static bool test() {
         EXPECT_CONTAINS(getFromSocket("/activewindow"), "special:magic");
         EXPECT_NOT_CONTAINS(str, "workspace: 9");
     }
+    NLog::log("{}Testing minsize/maxsize rules for tiled windows", Colors::YELLOW);
+    {
+        // Enable the config for testing
+        OK(getFromSocket("/keyword misc:clamp_minsize_maxsize_tiled 1"));
+        // Test maxsize clamping and centering for tiled windows
+        OK(getFromSocket("/keyword windowrule maxsize 500 500, class:maxsize_kitty"));
+        if (!spawnKitty("maxsize_kitty"))
+            return false;
+
+        // Single window: should be clamped to 500x500 and centered on the screen (1920x1080)
+        auto str = getFromSocket("/activewindow");
+        EXPECT_CONTAINS(str, "size: 500,500");
+        EXPECT_CONTAINS(str, "at: 710,290"); // Centered: (1920-500)/2, (1080-500)/2
+
+        // Test minsize clamping for tiled windows
+        OK(getFromSocket("/keyword windowrule minsize 400 400, class:minsize_kitty"));
+        if (!spawnKitty("minsize_kitty"))
+            return false;
+
+        // Single window: minsize < screen size, so full screen
+        str = getFromSocket("/activewindow");
+        EXPECT_CONTAINS(str, "size: 1920,1080");
+
+        // Spawn second window to create tiles
+        if (!spawnKitty("second_kitty"))
+            return false;
+
+        // Focus back to minsize_kitty: tile size ~960x1080, minsize respected
+        OK(getFromSocket("/dispatch focuswindow class:minsize_kitty"));
+        str = getFromSocket("/activewindow");
+        EXPECT_CONTAINS(str, "size: 960,1080"); // Approximate tile size
+
+        // Kill all windows
+        Tests::killAllWindows();
+        EXPECT(Tests::windowCount(), 0);
+    }
     NLog::log("{}Testing faulty rules", Colors::YELLOW);
     {
         const auto PARAM  = "Invalid parameter";
