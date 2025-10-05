@@ -8,6 +8,8 @@
 
 using namespace NColorManagement;
 
+const auto PRIMARIES_SCALE = 1000000.0f;
+
 CColorManager::CColorManager(SP<CWpColorManagerV1> resource) : m_resource(resource) {
     if UNLIKELY (!good())
         return;
@@ -66,20 +68,8 @@ CColorManager::CColorManager(SP<CWpColorManagerV1> resource) : m_resource(resour
 
         const auto OUTPUTRESOURCE = CWLOutputResource::fromResource(output);
 
-        if UNLIKELY (!OUTPUTRESOURCE) {
-            r->error(-1, "Invalid output (2)");
-            return;
-        }
-
-        const auto PMONITOR = OUTPUTRESOURCE->m_monitor.lock();
-
-        if UNLIKELY (!PMONITOR) {
-            r->error(-1, "Invalid output (2)");
-            return;
-        }
-
-        const auto RESOURCE =
-            PROTO::colorManagement->m_outputs.emplace_back(makeShared<CColorManagementOutput>(makeShared<CWpColorManagementOutputV1>(r->client(), r->version(), id), PMONITOR));
+        const auto RESOURCE = PROTO::colorManagement->m_outputs.emplace_back(
+            makeShared<CColorManagementOutput>(makeShared<CWpColorManagementOutputV1>(r->client(), r->version(), id), OUTPUTRESOURCE));
 
         if UNLIKELY (!RESOURCE->good()) {
             r->noMemory();
@@ -204,7 +194,7 @@ wl_client* CColorManager::client() {
     return m_resource->client();
 }
 
-CColorManagementOutput::CColorManagementOutput(SP<CWpColorManagementOutputV1> resource, WP<CMonitor> monitor) : m_resource(resource), m_monitor(monitor) {
+CColorManagementOutput::CColorManagementOutput(SP<CWpColorManagementOutputV1> resource, WP<CWLOutputResource> output) : m_resource(resource), m_output(output) {
     if UNLIKELY (!good())
         return;
 
@@ -229,10 +219,10 @@ CColorManagementOutput::CColorManagementOutput(SP<CWpColorManagementOutputV1> re
         }
 
         RESOURCE->m_self = RESOURCE;
-        if (!m_monitor.valid())
+        if (!m_output || !m_output->m_monitor.valid())
             RESOURCE->m_resource->sendFailed(WP_IMAGE_DESCRIPTION_V1_CAUSE_NO_OUTPUT, "No output");
         else {
-            RESOURCE->m_settings = m_monitor->m_imageDescription;
+            RESOURCE->m_settings = m_output->m_monitor->m_imageDescription;
             RESOURCE->m_resource->sendReady(RESOURCE->m_settings.updateId());
         }
     });
@@ -610,10 +600,10 @@ CColorManagementParametricCreator::CColorManagementParametricCreator(SP<CWpImage
                 return;
             }
             m_settings.primariesNameSet = false;
-            m_settings.primaries        = SPCPRimaries{.red   = {.x = r_x / 1000000.0f, .y = r_y / 1000000.0f},
-                                                       .green = {.x = g_x / 1000000.0f, .y = g_y / 1000000.0f},
-                                                       .blue  = {.x = b_x / 1000000.0f, .y = b_y / 1000000.0f},
-                                                       .white = {.x = w_x / 1000000.0f, .y = w_y / 1000000.0f}};
+            m_settings.primaries        = SPCPRimaries{.red   = {.x = r_x / PRIMARIES_SCALE, .y = r_y / PRIMARIES_SCALE},
+                                                       .green = {.x = g_x / PRIMARIES_SCALE, .y = g_y / PRIMARIES_SCALE},
+                                                       .blue  = {.x = b_x / PRIMARIES_SCALE, .y = b_y / PRIMARIES_SCALE},
+                                                       .white = {.x = w_x / PRIMARIES_SCALE, .y = w_y / PRIMARIES_SCALE}};
             m_valuesSet |= PC_PRIMARIES;
         });
     m_resource->setSetLuminances([this](CWpImageDescriptionCreatorParamsV1* r, uint32_t min_lum, uint32_t max_lum, uint32_t reference_lum) {
@@ -641,10 +631,10 @@ CColorManagementParametricCreator::CColorManagementParametricCreator(SP<CWpImage
                 r->error(WP_COLOR_MANAGER_V1_ERROR_UNSUPPORTED_FEATURE, "Mastering primaries are not supported");
                 return;
             }
-            m_settings.masteringPrimaries = SPCPRimaries{.red   = {.x = r_x / 1000000.0f, .y = r_y / 1000000.0f},
-                                                         .green = {.x = g_x / 1000000.0f, .y = g_y / 1000000.0f},
-                                                         .blue  = {.x = b_x / 1000000.0f, .y = b_y / 1000000.0f},
-                                                         .white = {.x = w_x / 1000000.0f, .y = w_y / 1000000.0f}};
+            m_settings.masteringPrimaries = SPCPRimaries{.red   = {.x = r_x / PRIMARIES_SCALE, .y = r_y / PRIMARIES_SCALE},
+                                                         .green = {.x = g_x / PRIMARIES_SCALE, .y = g_y / PRIMARIES_SCALE},
+                                                         .blue  = {.x = b_x / PRIMARIES_SCALE, .y = b_y / PRIMARIES_SCALE},
+                                                         .white = {.x = w_x / PRIMARIES_SCALE, .y = w_y / PRIMARIES_SCALE}};
             m_valuesSet |= PC_MASTERING_PRIMARIES;
 
             // FIXME:
@@ -744,7 +734,7 @@ CColorManagementImageDescriptionInfo::CColorManagementImageDescriptionInfo(SP<CW
 
     m_client = m_resource->client();
 
-    const auto toProto = [](float value) { return sc<int32_t>(std::round(value * 10000)); };
+    const auto toProto = [](float value) { return sc<int32_t>(std::round(value * PRIMARIES_SCALE)); };
 
     if (m_settings.icc.fd >= 0)
         m_resource->sendIccFile(m_settings.icc.fd, m_settings.icc.length);
@@ -803,7 +793,7 @@ void CColorManagementProtocol::onImagePreferredChanged(uint32_t preferredId) {
 
 void CColorManagementProtocol::onMonitorImageDescriptionChanged(WP<CMonitor> monitor) {
     for (auto const& output : m_outputs) {
-        if (output->m_monitor == monitor)
+        if (output->m_output && output->m_output->m_monitor == monitor)
             output->m_resource->sendImageDescriptionChanged();
     }
     // recheck feedbacks
