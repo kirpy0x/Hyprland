@@ -218,7 +218,7 @@ void CHyprDwindleLayout::applyNodeDataToWindow(SDwindleNodeData* pNode, bool for
 
     static auto PCLAMP_TILED = CConfigValue<Hyprlang::INT>("misc:size_limits_tiled");
 
-    if (*PCLAMP_TILED == 1) {
+    if (*PCLAMP_TILED) {
         Vector2D minSize = PWINDOW->m_windowData.minSize.valueOr(Vector2D{MIN_WINDOW_SIZE, MIN_WINDOW_SIZE});
         Vector2D maxSize = PWINDOW->isFullscreen() ? Vector2D{INFINITY, INFINITY} : PWINDOW->m_windowData.maxSize.valueOr(Vector2D{INFINITY, INFINITY});
         calcSize         = calcSize.clamp(minSize, maxSize);
