@@ -219,12 +219,19 @@ void CHyprDwindleLayout::applyNodeDataToWindow(SDwindleNodeData* pNode, bool for
     static auto PCLAMP_TILED = CConfigValue<Hyprlang::INT>("misc:size_limits_tiled");
 
     if (*PCLAMP_TILED) {
-        Vector2D minSize = PWINDOW->m_windowData.minSize.valueOr(Vector2D{MIN_WINDOW_SIZE, MIN_WINDOW_SIZE});
+        Vector2D monitorAvailable = PMONITOR->m_size - PMONITOR->m_reservedTopLeft - PMONITOR->m_reservedBottomRight -
+            Vector2D{(double)(gapsOut.m_left + gapsOut.m_right), (double)(gapsOut.m_top + gapsOut.m_bottom)};
+
+        Vector2D minSize = PWINDOW->m_windowData.minSize.valueOr(Vector2D{MIN_WINDOW_SIZE, MIN_WINDOW_SIZE}).clamp(Vector2D{0, 0}, monitorAvailable);
         Vector2D maxSize = PWINDOW->isFullscreen() ? Vector2D{INFINITY, INFINITY} : PWINDOW->m_windowData.maxSize.valueOr(Vector2D{INFINITY, INFINITY});
         calcSize         = calcSize.clamp(minSize, maxSize);
 
-        if (!PWINDOW->onSpecialWorkspace() && !PWINDOW->m_isPseudotiled && (calcSize.x < availableSpace.x || calcSize.y < availableSpace.y))
-            calcPos += (availableSpace - calcSize) / 2.0;
+        calcPos += (availableSpace - calcSize) / 2.0;
+
+        calcPos.x = std::clamp(calcPos.x, PMONITOR->m_position.x + PMONITOR->m_reservedTopLeft.x + gapsOut.m_left,
+                               PMONITOR->m_size.x + PMONITOR->m_position.x - PMONITOR->m_reservedBottomRight.x - gapsOut.m_right - calcSize.x);
+        calcPos.y = std::clamp(calcPos.y, PMONITOR->m_position.y + PMONITOR->m_reservedTopLeft.y + gapsOut.m_top,
+                               PMONITOR->m_size.y + PMONITOR->m_position.y - PMONITOR->m_reservedBottomRight.y - gapsOut.m_bottom - calcSize.y);
     }
 
     if (PWINDOW->onSpecialWorkspace() && !PWINDOW->isFullscreen()) {
