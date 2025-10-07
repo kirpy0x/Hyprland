@@ -223,8 +223,7 @@ void CHyprDwindleLayout::applyNodeDataToWindow(SDwindleNodeData* pNode, bool for
         Vector2D maxSize = PWINDOW->isFullscreen() ? Vector2D{INFINITY, INFINITY} : PWINDOW->m_windowData.maxSize.valueOr(Vector2D{INFINITY, INFINITY});
         calcSize         = calcSize.clamp(minSize, maxSize);
 
-        if (!PWINDOW->onSpecialWorkspace() && !PWINDOW->m_isPseudotiled && (calcSize.x < availableSpace.x || calcSize.y < availableSpace.y))
-            calcPos += (availableSpace - calcSize) / 2.0;
+        calcPos += (availableSpace - calcSize) / 2.0;
     }
 
     if (PWINDOW->onSpecialWorkspace() && !PWINDOW->isFullscreen()) {
