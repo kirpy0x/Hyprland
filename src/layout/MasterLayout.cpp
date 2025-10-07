@@ -701,6 +701,9 @@ void CHyprMasterLayout::applyNodeDataToWindow(SMasterNodeData* pNode) {
         calcSize         = calcSize.clamp(minSize, maxSize);
 
         calcPos += (availableSpace - calcSize) / 2.0;
+
+        calcPos.x = std::clamp(calcPos.x, 0.0, availableSpace.x - calcSize.x);
+        calcPos.y = std::clamp(calcPos.y, 0.0, availableSpace.y - calcSize.y);
     }
 
     if (PWINDOW->onSpecialWorkspace() && !PWINDOW->isFullscreen()) {
